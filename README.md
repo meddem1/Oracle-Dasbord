@@ -45,3 +45,29 @@ Gestion d'une infrastructure **Oracle Multitenant** pour une plateforme d'enseig
 | `03_resource_profiles.sql` | Gestion `CREATE PROFILE` | **Abderrahim** |
 | `04_db_schema.sql` | Tables (Users, Exams, Answers) | **Salma** |
 | `05_backup_strategy.rman
+
+
+structure du projet :
+
+dashboard-oracle/
+│
+├── config/
+│   └── db.php          # connexion Oracle
+│
+├── sql/
+│   ├── stockage.sql
+│   ├── sauvegarde.sql
+│   ├── securite.sql
+│   └── performance.sql
+│
+├── api/
+│   ├── tablespaces.php
+│   ├── backups.php
+│   └── archivelog.php
+│
+├── public/
+│   ├── index.php       # dashboard
+│   └── assets/
+│
+└── README.md
+
