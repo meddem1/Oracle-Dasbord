@@ -1,9 +1,47 @@
-1. Activer "GitHub Projects" (Le Dashboard)Ne vous contentez pas d'une liste de fichiers. Allez dans l'onglet "Projects" de votre dépôt GitHub et créez un nouveau projet de type "Board".Structure recommandée pour votre Board :Backlog : Toutes les tâches SQL/RMAN à venir.En cours : Ce sur quoi Wiam ou Mohamed travaillent actuellement.En Revue (Review) : Scripts SQL déposés mais non encore testés sur la PDB.Terminé : Scripts validés et exécutés en production.2. Indicateurs Clés (KPI) à afficherPuisque c'est un projet d'administration Oracle, votre Dashboard (via le README ou les Insights GitHub) doit refléter la santé de l'infrastructure :IndicateurCible OracleResponsableStatut PDBREAD WRITEWiamEspace Tablespace< 80% utiliséYousraRétention UNDOMin 3600s (Examens)ÉquipeStatut BackupSUCCESS (RMAN)Mohamed3. Visualisation de l'Avancement (Burndown Chart)GitHub génère automatiquement des graphiques si vous utilisez les Milestones (Jalons). Pour votre projet, créez 3 Jalons :Phase 1 : Infrastructure (Scripts 01 et 02)Phase 2 : Sécurité et Schéma (Scripts 03 et 04)Phase 3 : Plan de Maintenance (Script 05)4. Exemple de Dashboard visuel dans votre README.mdVous pouvez ajouter ce bloc de code Markdown pour simuler un tableau de bord directement en haut de votre fichier principal :Markdown## 📊 État du Projet (Admin Dashboard)
+# 📊 Dashboard : Administration Oracle e-Learn Maroc
 
-| Module | Responsable | État | Prochaine Étape |
-| :--- | :--- | :--- | :--- |
-| **Setup PDB** | @Wiam | ✅ Terminé | Monitoring OCI |
-| **Stockage TS** | @Yousra | 🚧 En cours | Optimisation `EXTENT` |
-| **Profils Sécurité** | @Abderrahim | ⏳ En attente | Test des limites CPU |
-| **Stratégie RMAN** | @Mohamed | ✅ Terminé | Test de restauration |
-5. Automatisation (GitHub Actions)Pour rendre votre dashboard "intelligent", vous pouvez configurer une GitHub Action qui vérifie la syntaxe de vos scripts SQL à chaque "Push".Si le script 04_db_schema.sql a une erreur de syntaxe, un badge ROUGE apparaît sur votre dashboard GitHub.Si le script est correct, un badge VERT s'affiche.Souhaitez-vous que je vous écrive le code du fichier README.md complet intégrant ces éléments visuels pour votre équipe ?
+[![Database Status](https://img.shields.io/badge/Oracle_PDB-Active-success?style=for-the-badge&logo=oracle)](https://github.com/votre-repo)
+[![Project Phase](https://img.shields.io/badge/Phase-Configuration_Initiale-blue?style=for-the-badge)](https://github.com/votre-repo)
+[![Backup Status](https://img.shields.io/badge/RMAN_Backup-Ready-brightgreen?style=for-the-badge)](https://github.com/votre-repo)
+
+## 📝 Présentation du Projet
+Gestion d'une infrastructure **Oracle Multitenant** pour une plateforme d'enseignement supportant des pics de charge durant les sessions d'examens au Maroc.
+
+---
+
+## 🏗️ Architecture & Suivi des Tâches
+
+### 📋 Tableau de Bord de l'Équipe
+| Membre | Module Oracle | Statut | Jalon (Milestone) |
+| :--- | :--- | :---: | :--- |
+| **Wiam** | Configuration PDB | ✅ | Setup Infrastructure |
+| **Yousra** | Gestion Stockage (TS) | 🏗️ | Stockage & I/O |
+| **Abderrahim** | Sécurité & Profils | ⏳ | Hardening |
+| **Salma** | Schéma & Objets | 🏗️ | Modélisation |
+| **Mohamed** | Stratégie RMAN | ✅ | Disponibilité |
+
+---
+
+## 🛠️ État des Composants Techniques
+
+### 💾 Stockage (Tablespaces)
+- [x] **TS_ELEARN_DATA** : Données étudiants (Autoextend ON)
+- [ ] **TS_ELEARN_EXAMS** : Données critiques (Local Management)
+- [x] **UNDO_RETENTION** : Configuré pour transactions longues (Examens)
+
+### 🔐 Sécurité & Ressources
+> **Profil `STUDENT_PROF` :**
+> - Sessions simultanées : 1
+> - CPU par session : 10s
+> - Idle Time : 15 min
+
+---
+
+## 📂 Structure du Répertoire
+| Fichier | Description | Responsable |
+| :--- | :--- | :--- |
+| `01_setup_pdb.sql` | Création de la PDB & Instance | **Wiam** |
+| `02_storage_mgmt.sql` | Scripts `CREATE TABLESPACE` | **Yousra** |
+| `03_resource_profiles.sql` | Gestion `CREATE PROFILE` | **Abderrahim** |
+| `04_db_schema.sql` | Tables (Users, Exams, Answers) | **Salma** |
+| `05_backup_strategy.rman
