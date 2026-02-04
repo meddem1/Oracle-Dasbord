@@ -1,36 +1,9 @@
-# e-Learn-Maroc-Admin
-projt d'administration de base de donnees Oracle
-# Projet  : Plateforme d'Enseignement en Ligne (e-Learn Maroc)
+1. Activer "GitHub Projects" (Le Dashboard)Ne vous contentez pas d'une liste de fichiers. Allez dans l'onglet "Projects" de votre dépôt GitHub et créez un nouveau projet de type "Board".Structure recommandée pour votre Board :Backlog : Toutes les tâches SQL/RMAN à venir.En cours : Ce sur quoi Wiam ou Mohamed travaillent actuellement.En Revue (Review) : Scripts SQL déposés mais non encore testés sur la PDB.Terminé : Scripts validés et exécutés en production.2. Indicateurs Clés (KPI) à afficherPuisque c'est un projet d'administration Oracle, votre Dashboard (via le README ou les Insights GitHub) doit refléter la santé de l'infrastructure :IndicateurCible OracleResponsableStatut PDBREAD WRITEWiamEspace Tablespace< 80% utiliséYousraRétention UNDOMin 3600s (Examens)ÉquipeStatut BackupSUCCESS (RMAN)Mohamed3. Visualisation de l'Avancement (Burndown Chart)GitHub génère automatiquement des graphiques si vous utilisez les Milestones (Jalons). Pour votre projet, créez 3 Jalons :Phase 1 : Infrastructure (Scripts 01 et 02)Phase 2 : Sécurité et Schéma (Scripts 03 et 04)Phase 3 : Plan de Maintenance (Script 05)4. Exemple de Dashboard visuel dans votre README.mdVous pouvez ajouter ce bloc de code Markdown pour simuler un tableau de bord directement en haut de votre fichier principal :Markdown## 📊 État du Projet (Admin Dashboard)
 
-## 👥 Équipe de Projet
-* **Membres :** Wiam, Salma, Youssra, Mohamed, Abderrahim.
-* **Contexte :** Gestion d'une base de données Oracle (PDB) pour une plateforme gérant des milliers d'étudiants et des sessions d'examens intensives.
-
----
-
-## 🎯 Objectifs du Projet
-L'objectif principal est d'optimiser l'administration de la base de données pour supporter des transactions longues et une forte consommation de ressources.
-
-1. **Architecture :** Création d'une Pluggable Database (PDB) dédiée.
-2. **Stockage :** Gestion des Tablespaces (séparation des données utilisateurs et examens).
-3. **Performance :** Adaptation du segment `UNDO` pour les transactions longues.
-4. **Sécurité & Ressources :** Limitation des ressources via des `Profiles` utilisateurs.
-5. **Disponibilité :** Stratégie de sauvegarde (Backup) avant chaque session d'examen. 
-
----
-
-## 📂 Structure du Répertoire (Git)
-| Fichier | Description |
-| :--- | :--- |
-| `01_setup_pdb.sql` | Création de la PDB et configuration initiale. | ( AMANOU Wiam )
-| `02_storage_mgmt.sql` | Scripts de création des Tablespaces (`TS_ELEARN_DATA`, `TS_ELEARN_EXAMS`).(MELLOULI Yousra) | 
-| `03_resource_profiles.sql` | Configuration des profils de limitation (CPU, Session time). (Abderrahim EL ASSALY) |
-| `04_db_schema.sql` | Scripts de création des tables (Users, Exams, Answers). |
-| `05_backup_strategy.rman` | Script RMAN pour la sauvegarde avant examen.(Mohammed-labbi) |
-
----
-
-## 🛠️ Instructions de Déploiement
-1. **Connexion au CDB :**
-   ```sql
-   sqlplus sys/password as sysdba
+| Module | Responsable | État | Prochaine Étape |
+| :--- | :--- | :--- | :--- |
+| **Setup PDB** | @Wiam | ✅ Terminé | Monitoring OCI |
+| **Stockage TS** | @Yousra | 🚧 En cours | Optimisation `EXTENT` |
+| **Profils Sécurité** | @Abderrahim | ⏳ En attente | Test des limites CPU |
+| **Stratégie RMAN** | @Mohamed | ✅ Terminé | Test de restauration |
+5. Automatisation (GitHub Actions)Pour rendre votre dashboard "intelligent", vous pouvez configurer une GitHub Action qui vérifie la syntaxe de vos scripts SQL à chaque "Push".Si le script 04_db_schema.sql a une erreur de syntaxe, un badge ROUGE apparaît sur votre dashboard GitHub.Si le script est correct, un badge VERT s'affiche.Souhaitez-vous que je vous écrive le code du fichier README.md complet intégrant ces éléments visuels pour votre équipe ?
