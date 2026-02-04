@@ -1,0 +1,12 @@
+/oracle-dash
+├── /config
+│   ├── db_app.php      # Connexion SQLite
+│   └── encryption.php  # Fonctions de chiffrement AES
+├── /auth
+│   ├── login.php
+│   └── logout.php
+├── /assets             # CSS (Bootstrap), JS, Images
+├── /core
+│   └── oracle_functions.php # Toutes les requêtes OCI8
+├── index.php           # Dashboard principal
+└── database.sq3        # Ta base SQLite (à protéger !)
