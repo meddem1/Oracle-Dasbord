@@ -1,0 +1,176 @@
+# # 1.1. Liste complète des utilisateurs avec statut
+SELECT 
+    username,
+    account_status,
+    lock_date,
+    expiry_date,
+    created,
+    profile,
+    default_tablespace
+FROM dba_users
+ORDER BY username;
+# # 1.2. Utilisateurs verrouillés ou expirés (KPI principal)
+SELECT 
+    username,
+    account_status,
+    TO_CHAR(lock_date, 'DD/MM/YYYY HH24:MI') as lock_date,
+    TO_CHAR(expiry_date, 'DD/MM/YYYY HH24:MI') as expiry_date,
+    profile
+FROM dba_users
+WHERE account_status NOT IN ('OPEN')
+ORDER BY account_status, username;
+# # 1.3. Utilisateurs avec privilèges élevés (DBA, SYSDBA)
+SELECT 
+    du.username,
+    du.account_status,
+    LISTAGG(dsp.privilege, ', ') WITHIN GROUP (ORDER BY dsp.privilege) as sys_privileges
+FROM dba_users du
+LEFT JOIN dba_sys_privs dsp ON du.username = dsp.grantee
+WHERE dsp.privilege IN ('DBA', 'SYSDBA', 'SYSOPER')
+   OR du.username IN ('SYS', 'SYSTEM')
+GROUP BY du.username, du.account_status
+ORDER BY du.username;
+# # 2. Requêtes pour la sécurité des profils
+# # 2.1. Configuration des profils de sécurité
+SELECT 
+    profile,
+    resource_name,
+    resource_type,
+    limit
+# # 2.3. Vérification des politiques de mot de passe
+SELECT 
+    p.profile,
+    COUNT(u.username) as user_count,
+    MAX(CASE WHEN p.resource_name = 'PASSWORD_LIFE_TIME' THEN p.limit END) as password_life_days,
+    MAX(CASE WHEN p.resource_name = 'FAILED_LOGIN_ATTEMPTS' THEN p.limit END) as max_failed_attempts
+FROM dba_profiles p
+LEFT JOIN dba_users u ON p.profile = u.profile
+WHERE p.resource_type = 'PASSWORD'
+GROUP BY p.profile
+ORDER BY p.profile;
+FROM dba_profiles
+WHERE resource_type = 'PASSWORD'
+ORDER BY profile, resource_name;
+# # 3. Requêtes pour les tentatives de connexion échouées
+# # 3.1. Échecs de connexion récents (24h)
+SELECT 
+    username,
+    os_username,
+    userhost,
+    terminal,
+    TO_CHAR(timestamp, 'DD/MM/YYYY HH24:MI:SS') as login_time,
+    returncode,
+    CASE returncode
+        WHEN 1017 THEN 'Invalid username/password'
+        WHEN 28000 THEN 'Account locked'
+        WHEN 28001 THEN 'Password expired'
+        WHEN 28002 THEN 'Password will expire soon'
+        ELSE 'Other error: ' || returncode
+    END as error_message
+FROM dba_audit_session
+WHERE returncode != 0
+  AND timestamp > SYSDATE - 1
+ORDER BY timestamp DESC;
+# # 3.2. Statistiques d'échecs par utilisateur (KPI)
+SELECT 
+    username,
+    userhost,
+    COUNT(*) as failed_attempts,
+    MIN(timestamp) as first_attempt,
+    MAX(timestamp) as last_attempt
+FROM dba_audit_session
+WHERE returncode != 0
+  AND timestamp > SYSDATE - 1/24  -- Dernière heure
+GROUP BY username, userhost
+HAVING COUNT(*) >= 3  -- Seuil d'alerte : 3 échecs en 1h
+ORDER BY failed_attempts DESC;
+# # 3.3. Échecs par adresse IP suspecte
+SELECT 
+    userhost as ip_address,
+    COUNT(DISTINCT username) as distinct_users,
+    COUNT(*) as total_failed_attempts,
+    TO_CHAR(MAX(timestamp), 'DD/MM/YYYY HH24:MI:SS') as last_attempt
+FROM dba_audit_session
+WHERE returncode != 0
+  AND timestamp > SYSDATE - 1  -- 24 heures
+  AND userhost IS NOT NULL
+  AND userhost NOT LIKE 'localhost%'
+GROUP BY userhost
+HAVING COUNT(*) > 10  -- Seuil : plus de 10 tentatives
+ORDER BY total_failed_attempts DESC;
+# # 4. Requêtes pour les sessions actives et sécurité
+# # 4.1. Sessions actives avec informations de sécurité
+SELECT 
+    s.username,
+    s.osuser,
+    s.machine,
+    s.program,
+    s.status,
+    s.logon_time,
+    s.sid,
+    s.serial#
+FROM v$session s
+WHERE s.username IS NOT NULL
+  AND s.type != 'BACKGROUND'
+ORDER BY s.logon_time DESC;
+# # 4.2. Sessions avec des utilisateurs système (à surveiller)
+# # SELECT 
+    s.username,
+    s.osuser,
+    s.machine,
+    s.program,
+    s.logon_time,
+    s.status
+FROM v$session s
+WHERE s.username IN ('SYS', 'SYSTEM', 'DBSNMP')
+ORDER BY s.logon_time DESC;
+# # 5. Requêtes pour les rôles et privilèges
+# # 5.1. Utilisateurs avec rôle DBA
+SELECT 
+    grantee as username,
+    granted_role,
+    admin_option,
+    default_role
+FROM dba_role_privs
+WHERE granted_role = 'DBA'
+ORDER BY grantee;
+# # 5.2. Privilèges système critiques par utilisateur
+# # SELECT 
+    grantee,
+    privilege,
+    admin_option
+FROM dba_sys_privs
+WHERE privilege IN ('SYSDBA', 'SYSOPER', 'CREATE USER', 'DROP USER', 
+                    'ALTER USER', 'CREATE ANY TABLE', 'DROP ANY TABLE',
+                    'GRANT ANY PRIVILEGE', 'GRANT ANY ROLE')
+ORDER BY grantee, privilege;
+# # 6. Requête synthèse pour le dashboard
+# # 6.1. Vue consolidée de sécurité (pour vos KPI)
+CREATE OR REPLACE VIEW vw_security_summary AS
+SELECT 
+    -- Comptes à risque
+    (SELECT COUNT(*) FROM dba_users WHERE account_status IN ('EXPIRED', 'LOCKED')) as expired_locked_accounts,
+    
+    -- Échecs de connexion récents (1h)
+    (SELECT COUNT(*) FROM dba_audit_session 
+     WHERE returncode != 0 AND timestamp > SYSDATE - 1/24) as failed_logins_last_hour,
+    
+    -- Sessions actives utilisateurs
+    (SELECT COUNT(*) FROM v$session 
+     WHERE username IS NOT NULL AND type != 'BACKGROUND') as active_user_sessions,
+    
+    -- Utilisateurs avec rôle DBA
+    (SELECT COUNT(DISTINCT grantee) FROM dba_role_privs 
+     WHERE granted_role = 'DBA') as dba_role_users,
+    
+    -- Profils à configuration faible
+    (SELECT COUNT(DISTINCT profile) FROM dba_profiles 
+     WHERE resource_type = 'PASSWORD' 
+       AND resource_name = 'PASSWORD_LIFE_TIME' 
+       AND limit = 'UNLIMITED') as unlimited_password_profiles
+FROM dual;
+# # 6.2. Test de la vue synthèse
+SELECT * FROM vw_security_summary;
+
+
+
