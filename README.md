@@ -1,4 +1,4 @@
-# 📊 Dashboard : Administration Oracle e-Learn Maroc
+# 📊 Dashboard : Administration Oracle 
 
 [![Database Status](https://img.shields.io/badge/Oracle_PDB-Active-success?style=for-the-badge&logo=oracle)](https://github.com/votre-repo)
 [![Project Phase](https://img.shields.io/badge/Phase-Configuration_Initiale-blue?style=for-the-badge)](https://github.com/votre-repo)
