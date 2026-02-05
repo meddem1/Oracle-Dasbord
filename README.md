@@ -71,3 +71,17 @@ dashboard-oracle/
 │
 └── README.md
 
+
+
+Architecture Proposée :
+----------------------
+Oracle DB → Collecteur Python → Base Temp (PostgreSQL) → API → Dashboard
+     ↑                            ↑                         ↑         ↑
+     |                            |                         |         |
+  (Requêtes)               (Stockage historique)      (FastAPI)  (React/Grafana)
+
+Composants :
+- Backend : Python 3.9+ avec cx_Oracle
+- Dashboard : Grafana (recommandé) ou React + Chart.js
+- Base historique : PostgreSQL ou TimescaleDB
+- Orchestration : Docker Compose
