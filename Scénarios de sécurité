@@ -1,0 +1,224 @@
+###Création / suppression d’utilisateurs (DDL Logging)
+SELECT username, action_name, timestamp
+FROM dba_audit_trail
+WHERE action_name IN ('CREATE USER', 'DROP USER', 'ALTER USER');
+
+##### *scénario 1* Supprimer ou désactiver les comptes inutiles.
+SELECT username, last_login
+FROM dba_users
+WHERE last_login IS NULL;
+
+#### * Scénario 2* Identifier les comptes bloqués automatiquement.
+SELECT username, account_status
+FROM dba_users
+WHERE account_status = 'LOCKED';
+
+ #### Vérifier les autorisations accordées.
+SELECT grantee, granted_role
+FROM dba_role_privs
+ORDER BY grantee;
+
+#### Vérifier les privilèges système dangereux
+SELECT grantee, privilege
+FROM dba_sys_privs
+WHERE privilege IN ('CREATE USER', 'DROP USER', 'ALTER SYSTEM');
+
+#### Identifier les comptes sensibles.
+SELECT grantee, granted_role
+FROM dba_role_privs
+WHERE granted_role = 'DBA';
+
+####Surveiller les échecs de connexion (sécurité).
+SELECT username, returncode, timestamp
+FROM dba_audit_session
+WHERE returncode != 0;
+
+
+
+## 📋 Scénario 3 : Attribution Excessive de Privilèges
+# # Un utilisateur "APP_USER" a accidentellement reçu le rôle DBA au lieu du rôle APP_ROLE.
+-- Scénario 3A : Utilisateurs non-DBA avec privilèges élevés
+SELECT 
+    u.username,
+    u.account_status,
+    LISTAGG(rp.granted_role, ', ') WITHIN GROUP (ORDER BY rp.granted_role) as roles,
+    LISTAGG(sp.privilege, ', ') WITHIN GROUP (ORDER BY sp.privilege) as privileges
+FROM dba_users u
+LEFT JOIN dba_role_privs rp ON u.username = rp.grantee
+LEFT JOIN dba_sys_privs sp ON u.username = sp.grantee
+WHERE u.username NOT IN ('SYS', 'SYSTEM')
+  AND (
+    rp.granted_role IN ('DBA', 'DATAPUMP_EXP_FULL_DATABASE', 'IMP_FULL_DATABASE') OR
+    sp.privilege IN ('SYSDBA', 'SYSOPER', 'CREATE USER', 'DROP ANY TABLE')
+  )
+GROUP BY u.username, u.account_status;
+
+
+-- Scénario  : Rôles avec trop de privilèges (analyse hiérarchique)
+WITH role_privileges AS (
+    SELECT 
+        grantee as role_name,
+        COUNT(*) as privilege_count
+    FROM dba_sys_privs
+    WHERE grantee IN (SELECT role FROM dba_roles)
+    GROUP BY grantee
+)
+SELECT 
+    rp.role_name,
+    rp.privilege_count,
+    COUNT(u.username) as assigned_users,
+    LISTAGG(u.username, ', ') WITHIN GROUP (ORDER BY u.username) as users_list
+FROM role_privileges rp
+LEFT JOIN dba_role_privs drp ON rp.role_name = drp.granted_role
+LEFT JOIN dba_users u ON drp.grantee = u.username
+WHERE rp.privilege_count > 20  -- Seuil arbitraire
+GROUP BY rp.role_name, rp.privilege_count
+ORDER BY rp.privilege_count DESC;
+
+
+# # Scénario 6 : Conformité avec les Standards d'Entreprise
+# # Audit de sécurité exigé par la direction. Vérification que tous les comptes suivent la politique.
+-- Scénario 6A : Vérification complète de conformité
+WITH security_check AS (
+    SELECT 
+        u.username,
+        -- Règle 1: Compte actif
+        CASE WHEN u.account_status = 'OPEN' THEN 'PASS' ELSE 'FAIL' END as statut_actif,
+        
+        -- Règle 2: Pas de profil DEFAULT
+        CASE WHEN u.profile != 'DEFAULT' THEN 'PASS' ELSE 'FAIL' END as profil_personnalisé,
+        
+        -- Règle 3: Mot de passe pas expiré
+        CASE WHEN u.expiry_date IS NULL OR u.expiry_date > SYSDATE + 7 THEN 'PASS' ELSE 'FAIL' END as pwd_valide,
+        
+        -- Règle 4: Pas de rôle DBA si pas administrateur
+        CASE WHEN EXISTS (
+            SELECT 1 FROM dba_role_privs rp 
+            WHERE rp.grantee = u.username 
+              AND rp.granted_role = 'DBA'
+        ) AND u.username NOT IN ('SYS','SYSTEM') THEN 'FAIL' ELSE 'PASS' END as role_appropriate,
+        
+        -- Règle 5: Connexion récente (si compte applicatif)
+        CASE WHEN u.last_login > SYSDATE - 90 OR u.last_login IS NULL THEN 'PASS' ELSE 'WARN' END as activite_recente
+        
+    FROM dba_users u
+    WHERE u.username NOT LIKE 'APEX_%'
+      AND u.username NOT IN ('ANONYMOUS', 'CTXSYS', 'DBSNMP', 'ORACLE_OCM', 'XS$NULL')
+)
+SELECT 
+    username,
+    statut_actif,
+    profil_personnalise,
+    pwd_valide,
+    role_appropriate,
+    activite_recente,
+    CASE 
+        WHEN statut_actif = 'FAIL' OR pwd_valide = 'FAIL' OR role_appropriate = 'FAIL' THEN 'NON_CONFORME'
+        WHEN profil_personnalise = 'FAIL' OR activite_recente = 'WARN' THEN 'A_AMELIORER'
+        ELSE 'CONFORME'
+    END as niveau_conformite
+FROM security_check
+ORDER BY niveau_conformite, username;
+
+
+# # Détection de "Privilege Delegation Anomalies"
+# # Délégation excessive de privilèges WITH ADMIN OPTION ou WITH GRANT OPTION.
+-- Scénario 14A : Utilisateurs pouvant déléguer des privilèges
+SELECT 
+    grantee as utilisateur_delegant,
+    granted_role,
+    admin_option,
+    default_role,
+    (SELECT COUNT(*) FROM dba_users du WHERE du.username = drp.grantee) as est_utilisateur,
+    (SELECT account_status FROM dba_users du WHERE du.username = drp.grantee) as statut_compte
+FROM dba_role_privs drp
+WHERE admin_option = 'YES'
+  AND grantee IN (SELECT username FROM dba_users)
+  AND granted_role NOT IN ('CONNECT', 'RESOURCE')  -- Rôles basiques exclus
+ORDER BY grantee, granted_role;
+
+-- Scénario  : Chaîne de délégation dangereuse
+WITH delegation_chain (delegator, role_delegue, niveau, chemin) AS (
+    SELECT 
+        grantee,
+        granted_role,
+        1,
+        CAST(grantee || ' -> ' || granted_role AS VARCHAR2(4000))
+    FROM dba_role_privs
+    WHERE admin_option = 'YES'
+    
+    UNION ALL
+    
+    SELECT 
+        dc.delegator,
+        drp.granted_role,
+        dc.niveau + 1,
+        dc.chemin || ' -> ' || drp.granted_role
+    FROM delegation_chain dc
+    JOIN dba_role_privs drp ON dc.role_delegue = drp.grantee
+    WHERE drp.admin_option = 'YES'
+      AND dc.niveau < 5
+)
+SELECT 
+    delegator as origine_delegation,
+    role_delegue as role_final,
+    niveau as profondeur_chain,
+    chemin as chaine_delegation,
+    CASE 
+        WHEN niveau >= 3 THEN 'CHAINE_LONGUE'
+        WHEN role_delegue IN ('DBA', 'SYSDBA') THEN 'PRIVILEGE_ELEVE'
+        ELSE 'SURVEILLANCE'
+    END as risque
+FROM delegation_chain
+ORDER BY niveau DESC, delegator;
+
+#### Pour lier cela au Dashboard, utiliser ce format de code :
+// Exemple pour  (Comptes verrouillés)
+$query = "SELECT username, account_status FROM dba_users WHERE account_status LIKE '%LOCKED%'";
+$stid = oci_parse($conn, $query);
+oci_execute($stid);
+
+echo "<table><tr><th>Utilisateur</th><th>Statut</th></tr>";
+while ($row = oci_fetch_array($stid, OCI_ASSOC)) {
+    echo "<tr><td>" . $row['USERNAME'] . "</td><td>" . $row['ACCOUNT_STATUS'] . "</td></tr>";
+}
+echo "</table>";
+
+#### C'est bien noté. Pour le projet "Dashboard intelligent de supervision pour DBA", la partie de Radifi Salma (Sécurité & Utilisateurs) est l'une des plus critiques.
+
+Scénario  : Détection des intrusions (Échecs de connexion)
+Problématique : Identifier les tentatives de connexion suspectes qui pourraient indiquer une attaque par force brute.
+
+SELECT os_username, userhost, username, 
+       to_char(timestamp, 'DD-MON HH24:MI') as "Moment",
+       returncode
+FROM dba_audit_session
+WHERE returncode != 0 -- Filtre les erreurs (ex: ORA-01017 mauvais mot de passe)
+AND timestamp > sysdate - 1/24 -- Uniquement la dernière heure
+ORDER BY timestamp DESC;
+Objectif Dashboard : Afficher un compteur d'alertes "Tentatives suspectes" en rouge.
+
+Scénario 2 : Surveillance des comptes bloqués
+Problématique : Un utilisateur ne peut plus travailler car son compte est verrouillé (suite à trop d'erreurs ou par sécurité).
+SELECT username, account_status, lock_date, profile
+FROM dba_users
+WHERE account_status LIKE '%LOCKED%'
+OR account_status LIKE '%EXPIRED%';
+Objectif Dashboard : Une liste cliquable permettant au DBA de voir instantanément qui est bloqué et pourquoi.
+
+#### Scénario 3 : Audit des changements de privilèges (Sécurité interne)
+Problématique : Quelqu'un a-t-il donné des droits de "DBA" en cachette ? Il faut surveiller l'attribution des droits sensibles.
+SELECT grantee, privilege, admin_option, grantor
+FROM dba_sys_privs
+WHERE privilege IN ('DBA', 'SYSDBA', 'DROP ANY TABLE', 'ALTER SYSTEM')
+ORDER BY grantee;
+
+####Problématique : Savoir d'où se connectent les utilisateurs pour détecter des provenances inhabituelles.
+SELECT username, machine, program, count(*) as "Nombre_Sessions"
+FROM v$session
+WHERE type = 'USER'
+GROUP BY username, machine, program
+ORDER BY 4 DESC;
+
+
+
